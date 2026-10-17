@@ -16,7 +16,7 @@ with st.sidebar:
     tone = st.selectbox("Writing tone", ["Friendly", "Premium", "Funny", "Minimal", "Persuasive"])
     language = st.selectbox("Output language", ["English", "Hindi", "Marathi", "Hinglish"])
     st.markdown("---")
-    st.caption("Local mode: run the backend and Ollama on your own computer.")
+    st.caption("Supports local Ollama or hosted inference on Render.")
 
 left, right = st.columns([1, 1])
 with left:
@@ -52,10 +52,12 @@ if st.button("Make This Sell", type="primary", use_container_width=True):
                 response.raise_for_status()
                 result = response.json()
                 st.session_state["sales_kit"] = result["sales_kit"]
+                st.session_state["provider"] = result.get("provider", "AI")
+                st.session_state["model"] = result.get("model", "")
             except requests.exceptions.ConnectionError:
                 st.error(f"Could not reach the backend at {API_URL}. Start the FastAPI server and try again.")
             except requests.exceptions.Timeout:
-                st.error("The model took too long to respond. Try again or use a smaller Ollama model.")
+                st.error("The model took too long to respond. Try again or check your backend connection.")
             except requests.exceptions.HTTPError as exc:
                 detail = "The backend returned an error."
                 try:
@@ -69,6 +71,10 @@ if st.button("Make This Sell", type="primary", use_container_width=True):
 if "sales_kit" in st.session_state:
     st.markdown("---")
     st.header("Your sales kit")
+    provider = st.session_state.get("provider")
+    model = st.session_state.get("model")
+    if provider and model:
+        st.caption(f"Generated with **{model}** via **{provider}**")
     sales_kit = st.session_state["sales_kit"]
     st.markdown(sales_kit)
     st.download_button(

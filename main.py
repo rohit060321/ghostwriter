@@ -13,6 +13,8 @@ app = FastAPI(
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:1b")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "gemma2-9b-it")
 
 
 class ProductRequest(BaseModel):
@@ -30,23 +32,41 @@ class ProductRequest(BaseModel):
 
 @app.get("/")
 def home():
+    provider = "Groq" if GROQ_API_KEY else "Ollama"
+    model = GROQ_MODEL if GROQ_API_KEY else OLLAMA_MODEL
     return {
         "name": "GhostWriter AI API",
         "status": "running",
-        "model": OLLAMA_MODEL,
+        "provider": provider,
+        "model": model,
         "docs": "/docs",
     }
 
 
 @app.get("/health")
 def health():
+    if GROQ_API_KEY:
+        return {
+            "api": "ok",
+            "provider": "Groq",
+            "configured_model": GROQ_MODEL,
+        }
     try:
         response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
         response.raise_for_status()
         models = [item.get("name", "") for item in response.json().get("models", [])]
-        return {"api": "ok", "ollama": "reachable", "configured_model": OLLAMA_MODEL, "available_models": models}
+        return {
+            "api": "ok",
+            "provider": "Ollama",
+            "ollama": "reachable",
+            "configured_model": OLLAMA_MODEL,
+            "available_models": models,
+        }
     except requests.RequestException:
-        raise HTTPException(status_code=503, detail="Ollama is not reachable. Start Ollama and check OLLAMA_URL.")
+        raise HTTPException(
+            status_code=503,
+            detail="No AI backend reachable. Start Ollama locally or set GROQ_API_KEY for cloud inference.",
+        )
 
 
 @app.post("/generate")
@@ -80,6 +100,46 @@ Keep it clear, specific, and suitable for a small seller. Mention the price only
 Avoid exaggerated promises and do not claim that the product is the best.
 """
 
+    if GROQ_API_KEY:
+        try:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are GhostWriter AI, a practical marketing copy assistant for small businesses.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            body = response.json()
+            sales_kit = body.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            if not sales_kit:
+                raise HTTPException(status_code=502, detail="Groq returned an empty response.")
+            return {"sales_kit": sales_kit, "model": GROQ_MODEL, "provider": "Groq"}
+        except requests.Timeout:
+            raise HTTPException(status_code=504, detail="Groq request timed out. Please try again.")
+        except requests.HTTPError as exc:
+            message = "Groq returned an error."
+            if exc.response is not None:
+                try:
+                    message = exc.response.json().get("error", {}).get("message", message)
+                except Exception:
+                    pass
+            raise HTTPException(status_code=502, detail=f"Groq API error: {message}")
+        except requests.RequestException as exc:
+            raise HTTPException(status_code=502, detail=f"Failed to communicate with Groq: {exc}")
+
     try:
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
@@ -100,7 +160,10 @@ Avoid exaggerated promises and do not claim that the product is the best.
     except requests.Timeout:
         raise HTTPException(status_code=504, detail="The model request timed out. Try again.")
     except requests.ConnectionError:
-        raise HTTPException(status_code=503, detail="Cannot connect to Ollama. Start Ollama and ensure the model is installed.")
+        raise HTTPException(
+            status_code=503,
+            detail="Cannot connect to Ollama. Start Ollama and ensure the model is installed, or set GROQ_API_KEY.",
+        )
     except requests.HTTPError as exc:
         message = "Ollama returned an error."
         if exc.response is not None:

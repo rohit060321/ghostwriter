@@ -95,6 +95,38 @@ $env:GHOSTWRITER_API_URL="http://127.0.0.1:8000"
 streamlit run app.py
 ```
 
+## Deploy to Render
+
+You can deploy GhostWriter AI to [Render](https://render.com/) on the free tier. The project includes a pre-configured `render.yaml` Blueprint and `start.sh` runner that hosts both FastAPI and Streamlit seamlessly in a single Web Service.
+
+### Option 1: 1-Click Deploy via Render Blueprint (Recommended)
+
+1. Push your latest code to GitHub:
+   ```powershell
+   git push origin main
+   ```
+2. Log in to [Render Dashboard](https://dashboard.render.com/).
+3. Click **New +** > **Blueprint**.
+4. Connect your `ghostwriter` repository.
+5. Render will detect `render.yaml`.
+6. In the environment setup, set **`GROQ_API_KEY`** (get a free key at [Groq Console](https://console.groq.com/keys)). This powers open-weight Gemma inference 24/7 in the cloud without needing Ollama or your PC running.
+7. Click **Apply**. Render will automatically build and launch your app.
+
+### Option 2: Manual Web Service Setup
+
+1. In Render Dashboard, click **New +** > **Web Service**.
+2. Select and connect your repository.
+3. Configure the settings:
+   - **Name**: `ghostwriter-ai`
+   - **Environment / Runtime**: `Python`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `bash start.sh`
+   - **Plan**: `Free`
+4. Under **Environment Variables**, add:
+   - `GROQ_API_KEY`: *(Your key from console.groq.com)*
+   - `GROQ_MODEL`: `gemma2-9b-it`
+5. Click **Create Web Service**.
+
 ## Open innovation: why it matters
 
 A locally hosted open-weight model gives small sellers a way to generate copy without paying for each request to a closed AI API. Local inference can keep product information on the user's own computer and makes it easier to swap supported models as needs change. The application is useful offline after the model has been downloaded, provided Ollama and the app are running locally. Model license terms still apply; review the license of the specific model before commercial use.
